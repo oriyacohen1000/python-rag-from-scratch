@@ -163,3 +163,4 @@ If the system responds with "i don't have enough data", utilize the built-in pro
 increase the K-value to 3 or 5 to broaden the search horizon.
 
 Developed as a showcase of core AI engineering principles
+# python-rag-from-scratch
