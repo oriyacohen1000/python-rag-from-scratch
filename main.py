@@ -271,40 +271,67 @@ def process_docx_files(docx_paths):
     print(f"\n[Summary] Total pages extracted: {len(all_pages)}")
     return all_pages
 
+def get_chunks(pages_data, chunk_size, overlap):
+    """Splits pages_data into overlapping chunks while preserving source metadata.
 
+    Concatenates all page texts into one continuous string, tracks each page's
+    start offset, then chunks with overlap. Each chunk is assigned the metadata
+    (source_file, page) of the page where the chunk starts.
 
+    Args:
+        pages_data: list of dicts from process_pdf_files / process_docx_files,
+                    each with keys "text", "source_file", "page".
+        chunk_size: number of characters per chunk.
+        overlap:    number of characters shared between consecutive chunks.
 
+    Returns:
+        list of dicts: [{"text": ..., "source_file": ..., "page": ...}, ...]
+    """
+    # Build one continuous string and record where each page starts
+    full_text = ""
+    page_offsets = []  # list of (start_char, source_file, page_number)
+    for page in pages_data:
+        page_offsets.append((len(full_text), page["source_file"], page["page"]))
+        full_text += page["text"] + "\n\n"
 
-
-
-
-
-
-def get_chunks(file_path, chunk_size, overlap):
-    """Splits the knowledge base into overlapping segments."""
-    with open(file_path, 'r', encoding='utf-8') as file:
-        full_text = file.read()
+    # Helper: find which page a character offset belongs to
+    def get_metadata_at(char_index):
+        metadata = page_offsets[0]
+        for offset, source_file, page_num in page_offsets:
+            if offset <= char_index:
+                metadata = (offset, source_file, page_num)
+            else:
+                break
+        return metadata[1], metadata[2]  # source_file, page_number
 
     chunk_list = []
     start = 0
     while start < len(full_text):
-        chunk = full_text[start: start + chunk_size]
-        chunk_list.append(chunk)
-        start = start + chunk_size - overlap
+        chunk_text = full_text[start: start + chunk_size].strip()
+        if chunk_text:
+            source_file, page_num = get_metadata_at(start)
+            chunk_list.append({
+                "text": chunk_text,
+                "source_file": source_file,
+                "page": page_num
+            })
+        start += chunk_size - overlap
     return chunk_list
 
 
 def create_vector_store(chunks_list):
-    """Generates embeddings for all text chunks."""
+    """Generates embeddings for all text chunks and preserves their source metadata."""
     response = client.embeddings.create(
-        input=chunks_list,
+        input=[chunk["text"] for chunk in chunks_list],
         model="text-embedding-3-small"
     )
 
     vector_store = []
     for i, item in enumerate(response.data):
         vector_store.append({
-            "text": chunks_list[i],
+            "text": chunks_list[i]["text"],
+            "source_file": chunks_list[i]["source_file"],
+            "page": chunks_list[i]["page"],
             "vector": item.embedding
         })
     return vector_store
@@ -322,11 +349,16 @@ def retrieve_k_relevant_chunks(user_query, database, k_value):
     for item in database:
         # Calculate dot product similarity
         score = sum(a * b for a, b in zip(query_vector, item["vector"]))
-        results.append({"text": item["text"], "score": score})
+        results.append({
+            "text": item["text"],
+            "source_file": item["source_file"],
+            "page": item["page"],
+            "score": score
+        })
 
     # Sort results by similarity score
     results.sort(key=lambda x: x["score"], reverse=True)
-    return [item["text"] for item in results[:k_value]]
+    return [{"text": r["text"], "source_file": r["source_file"], "page": r["page"]} for r in results[:k_value]]
 
 
 def generate_answer(user_query, context):
@@ -371,7 +403,9 @@ def main():
             k_value = 1  # Starting with K=1 to demonstrate the system's ability to adjust
 
             print(f"\nInitializing RAG (Size: {chunk_size}, Overlap: {overlap})...")
-            chunks = get_chunks('knowledge.txt', chunk_size, overlap)
+            # TODO: replace with process_pdf_files / process_docx_files once file upload is wired in
+            pages_data = process_pdf_files([])
+            chunks = get_chunks(pages_data, chunk_size, overlap)
             database = create_vector_store(chunks)
             print("\n[System] RAG Mode Activated. Type 'exit' to quit.")
 
@@ -384,11 +418,15 @@ def main():
 
                 # Retrieval Step
                 relevant_chunks = retrieve_k_relevant_chunks(user_query, database, k_value)
-                context = "\n\n---\n\n".join(relevant_chunks)
+                context = "\n\n---\n\n".join(chunk["text"] for chunk in relevant_chunks)
 
                 # Generation Step
                 answer = generate_answer(user_query, context)
                 print(f"\nAI (K={k_value}): {answer}")
+
+                # Show source references
+                references = [f"{c['source_file']} (page {c['page']})" for c in relevant_chunks]
+                print(f"[Sources] {', '.join(references)}")
 
                 # Smart Logic: Offer to increase K if context is insufficient
                 if answer.lower() == "i don't have enough data":
