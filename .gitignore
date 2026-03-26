@@ -1,1 +1,7 @@
 .env
+__pycache__/
+.venv/
+venv/
+.idea/
+.DS_Store
+answers.txt

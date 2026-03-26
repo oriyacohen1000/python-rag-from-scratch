@@ -27,9 +27,9 @@ def new_answer_file_to_a_general_question_file(question_file):
             answer = response.choices[0].message.content
             answer_list.append(f"Q: {question}\nA: {answer}")
 
-        with open('answers.text', 'w') as answer_file:
+        with open('answers.txt', 'w') as answer_file:
             answer_file.write("\n\n".join(answer_list))
-        print("\n[Success] Batch processing complete. Check 'answers.text'.")
+        print("\n[Success] Batch processing complete. Check 'answers.txt'.")
     except FileNotFoundError:
         print(f"\n[Error] The file '{question_file}' was not found.")
 
@@ -125,7 +125,7 @@ def main():
             k_value = 1  # Starting with K=1 to demonstrate the system's ability to adjust
 
             print(f"\nInitializing RAG (Size: {chunk_size}, Overlap: {overlap})...")
-            chunks = get_chunks('knowledge.text', chunk_size, overlap)
+            chunks = get_chunks('knowledge.txt', chunk_size, overlap)
             database = create_vector_store(chunks)
             print("\n[System] RAG Mode Activated. Type 'exit' to quit.")
 
@@ -169,7 +169,7 @@ def main():
     elif user_choice == "2":
         # --- Batch Mode Execution ---
         print("\n--- Batch Mode Activated ---")
-        new_answer_file_to_a_general_question_file('question.text')
+        new_answer_file_to_a_general_question_file('question.txt')
 
     else:
         print("\n[System] Invalid choice. Program terminated.")
