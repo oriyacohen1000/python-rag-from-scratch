@@ -384,6 +384,43 @@ def generate_answer(user_query, context):
     return response.choices[0].message.content
 
 
+def collect_files_from_user():
+    """Prompts the user to enter file paths one by one until they are done.
+
+    Validates that each path exists and has a supported extension (.pdf or .docx).
+    Returns two lists: pdf_paths and docx_paths.
+    """
+    pdf_paths = []
+    docx_paths = []
+    print("\n--- File Upload ---")
+    print("Enter the full path to each file you want to upload.")
+    print("Supported formats: .pdf, .docx  |  Type 'done' when finished.\n")
+
+    while True:
+        raw = input("File path: ").strip().strip('"').strip("'")
+        if raw.lower() == "done":
+            if not pdf_paths and not docx_paths:
+                print("[Error] You must upload at least one file.")
+                continue
+            break
+        if not raw:
+            continue
+        if not os.path.isfile(raw):
+            print(f"[Error] File not found: {raw}")
+            continue
+        ext = os.path.splitext(raw)[1].lower()
+        if ext == ".pdf":
+            pdf_paths.append(raw)
+            print(f"[Added] {os.path.basename(raw)}")
+        elif ext == ".docx":
+            docx_paths.append(raw)
+            print(f"[Added] {os.path.basename(raw)}")
+        else:
+            print(f"[Error] Unsupported file type '{ext}'. Only .pdf and .docx are supported.")
+
+    return pdf_paths, docx_paths
+
+
 def main():
     print("--- Welcome to the Advanced RAG & Q&A Tool ---")
     print("\nAvailable Modes:")
@@ -402,9 +439,11 @@ def main():
             overlap = int(c_overlap.strip())
             k_value = 1  # Starting with K=1 to demonstrate the system's ability to adjust
 
+            # Collect files from user and extract text with source metadata
+            pdf_paths, docx_paths = collect_files_from_user()
+            pages_data = process_pdf_files(pdf_paths) + process_docx_files(docx_paths)
+
             print(f"\nInitializing RAG (Size: {chunk_size}, Overlap: {overlap})...")
-            # TODO: replace with process_pdf_files / process_docx_files once file upload is wired in
-            pages_data = process_pdf_files([])
             chunks = get_chunks(pages_data, chunk_size, overlap)
             database = create_vector_store(chunks)
             print("\n[System] RAG Mode Activated. Type 'exit' to quit.")
