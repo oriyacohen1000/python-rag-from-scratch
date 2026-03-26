@@ -1,10 +1,12 @@
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
+import io
 import pdfplumber
 import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
+from docx import Document
 # Load environment variables from .env file
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
@@ -158,6 +160,116 @@ def process_pdf_files(pdf_paths):
     return all_pages
 
 
+WORDS_PER_APPROX_PAGE = 300  # Word count used to simulate page breaks in DOCX files
+
+
+def extract_docx_table_as_text(table_element):
+    """Converts a DOCX table XML element into a readable string."""
+    W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    rows = []
+    for row_elem in table_element.findall(f"{{{W}}}tr"):
+        cells = []
+        for cell_elem in row_elem.findall(f"{{{W}}}tc"):
+            cell_text = "".join(
+                node.text for node in cell_elem.iter()
+                if node.tag.endswith("}t") and node.text
+            ).strip()
+            cells.append(cell_text)
+        rows.append(" | ".join(cells))
+    return "\n".join(rows)
+
+
+def extract_image_text_from_docx(doc):
+    """Runs OCR on all images embedded in a DOCX file (Hebrew + English)."""
+    image_texts = []
+    for rel in doc.part.rels.values():
+        if "image" in rel.reltype:
+            try:
+                image_data = rel.target_part.blob
+                image = Image.open(io.BytesIO(image_data))
+                ocr_text = pytesseract.image_to_string(image, lang='heb+eng').strip()
+                if ocr_text:
+                    image_texts.append(ocr_text)
+            except Exception:
+                continue
+    return image_texts
+
+
+def extract_text_from_docx(docx_path):
+    """Extracts text, tables, and image-embedded text from a DOCX file.
+
+    Since DOCX files have no native page numbers, content is grouped into approximate
+    pages every WORDS_PER_APPROX_PAGE words. Returns the same list-of-dicts format as
+    extract_text_from_pdf: [{"text": ..., "source_file": ..., "page": ...}, ...]
+    """
+    doc = Document(docx_path)
+    pages_data = []
+    current_parts = []
+    current_word_count = 0
+    page_num = 1
+
+    def flush_page():
+        nonlocal page_num, current_parts, current_word_count
+        text = "\n\n".join(current_parts).strip()
+        if text:
+            pages_data.append({
+                "text": text,
+                "source_file": os.path.basename(docx_path),
+                "page": page_num
+            })
+        page_num += 1
+        current_parts = []
+        current_word_count = 0
+
+    # Iterate body elements in document order to preserve paragraph/table sequence
+    for element in doc.element.body:
+        tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
+
+        if tag == "p":
+            para_text = "".join(
+                node.text for node in element.iter()
+                if node.tag.endswith("}t") and node.text
+            ).strip()
+            if para_text:
+                current_parts.append(para_text)
+                current_word_count += len(para_text.split())
+                if current_word_count >= WORDS_PER_APPROX_PAGE:
+                    flush_page()
+
+        elif tag == "tbl":
+            table_text = extract_docx_table_as_text(element)
+            if table_text.strip():
+                current_parts.append(f"[TABLE]\n{table_text}\n[END TABLE]")
+                current_word_count += len(table_text.split())
+                if current_word_count >= WORDS_PER_APPROX_PAGE:
+                    flush_page()
+
+    # Images are stored in relationships, not inline with body elements
+    image_texts = extract_image_text_from_docx(doc)
+    if image_texts:
+        current_parts.append("[IMAGE TEXT]\n" + "\n".join(image_texts) + "\n[END IMAGE TEXT]")
+
+    # Flush any remaining content
+    if current_parts:
+        flush_page()
+
+    return pages_data
+
+
+def process_docx_files(docx_paths):
+    """Processes a list of DOCX file paths and returns combined page-level extracted data.
+
+    Each entry contains the text, source file name, and approximate page number so that
+    when the text is later split into chunks, every chunk can reference its origin.
+    """
+    all_pages = []
+    for docx_path in docx_paths:
+        print(f"\n[Processing] {os.path.basename(docx_path)}")
+        pages = extract_text_from_docx(docx_path)
+        all_pages.extend(pages)
+        print(f"[Done] Extracted {len(pages)} approx. page(s) from '{os.path.basename(docx_path)}'")
+    print(f"\n[Summary] Total pages extracted: {len(all_pages)}")
+    return all_pages
 
 
 
