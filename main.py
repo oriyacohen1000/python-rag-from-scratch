@@ -13,12 +13,39 @@ api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
 
-def new_answer_file_to_a_general_question_file(question_file):
-    """Processes a batch of questions from a file and saves answers to answers.text."""
-    try:
-        with open(question_file, 'r') as file:
-            question_list = [line.strip() for line in file if line.strip()]
+def read_questions_from_file(file_path):
+    """Extracts a list of questions (one per non-empty line) from a .txt, .docx, or .pdf file."""
+    ext = os.path.splitext(file_path)[1].lower()
 
+    if ext == ".txt":
+        with open(file_path, 'r', encoding='utf-8') as f:
+            raw_text = f.read()
+
+    elif ext == ".docx":
+        doc = Document(file_path)
+        raw_text = "\n".join(
+            para.text for para in doc.paragraphs if para.text.strip()
+        )
+
+    elif ext == ".pdf":
+        pages = extract_text_from_pdf(file_path)
+        raw_text = "\n".join(page["text"] for page in pages)
+
+    else:
+        raise ValueError(f"Unsupported file type '{ext}'. Use .txt, .docx, or .pdf.")
+
+    return [line.strip() for line in raw_text.splitlines() if line.strip()]
+
+
+def new_answer_file_to_a_general_question_file(question_file):
+    """Processes a batch of questions from a .txt, .docx, or .pdf file and saves answers to answers.txt."""
+    try:
+        question_list = read_questions_from_file(question_file)
+        if not question_list:
+            print("\n[Error] No questions found in the file.")
+            return
+
+        print(f"[Info] Found {len(question_list)} question(s). Processing...")
         answer_list = []
         for question in question_list:
             response = client.chat.completions.create(
@@ -37,6 +64,8 @@ def new_answer_file_to_a_general_question_file(question_file):
         print("\n[Success] Batch processing complete. Check 'answers.txt'.")
     except FileNotFoundError:
         print(f"\n[Error] The file '{question_file}' was not found.")
+    except ValueError as e:
+        print(f"\n[Error] {e}")
 
 
 SCANNED_TEXT_THRESHOLD = 20  # Min characters per page to consider a PDF text-based
@@ -492,7 +521,12 @@ def main():
     elif user_choice == "2":
         # --- Batch Mode Execution ---
         print("\n--- Batch Mode Activated ---")
-        new_answer_file_to_a_general_question_file('question.txt')
+        print("Supported formats: .txt, .docx, .pdf")
+        question_file = input("Enter path to your questions file: ").strip().strip('"').strip("'")
+        if not os.path.isfile(question_file):
+            print(f"\n[Error] File not found: {question_file}")
+        else:
+            new_answer_file_to_a_general_question_file(question_file)
 
     else:
         print("\n[System] Invalid choice. Program terminated.")
