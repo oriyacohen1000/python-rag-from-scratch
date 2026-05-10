@@ -4,8 +4,6 @@ A framework-free implementation of a **Retrieval-Augmented Generation (RAG)** pi
 
 The project intentionally avoids orchestration frameworks like LangChain or LlamaIndex to demonstrate a direct understanding of the underlying mechanics: document chunking, embedding generation, vector similarity search, and context-constrained answer generation.
 
-> Built with [Claude Code](https://claude.ai/code) (Anthropic) as an AI coding assistant.
-
 ---
 
 ## How it works
