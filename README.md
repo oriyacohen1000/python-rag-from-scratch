@@ -1,166 +1,136 @@
-# Advanced Python RAG: Engineering from Scratch
+# Python RAG from Scratch
 
-A lightweight, framework-free implementation of a **Retrieval-Augmented Generation (RAG)** system built with Python and OpenAI APIs.
+A framework-free implementation of a **Retrieval-Augmented Generation (RAG)** pipeline built with Python and the OpenAI API.
 
-This project focuses on the core mechanics behind RAG systems: document chunking, embedding generation, semantic retrieval, and context-aware answer generation — without relying on orchestration frameworks such as LangChain or LlamaIndex.
+The project intentionally avoids orchestration frameworks like LangChain or LlamaIndex to demonstrate a direct understanding of the underlying mechanics: document chunking, embedding generation, vector similarity search, and context-constrained answer generation.
 
-## Overview
+> Built with [Claude Code](https://claude.ai/code) (Anthropic) as an AI coding assistant.
 
-This project was built from scratch to demonstrate a practical understanding of the RAG pipeline and the engineering decisions behind it.
+---
 
-Instead of using an external vector database or high-level abstractions, the system uses:
-- a custom **sliding-window chunking** pipeline,
-- an in-memory **vector store**,
-- manual **dot product similarity** for retrieval,
-- and direct prompt-based answer generation with OpenAI models.
+## How it works
 
-## Engineering Highlights
+```
+knowledge.txt
+     │
+     ▼
+ Chunking (sliding window)
+     │
+     ▼
+ Embeddings (text-embedding-3-small) ◄── stored in memory
+     │
+     ▼
+ User query ──► query embedding
+                     │
+                     ▼
+              Dot product similarity
+                     │
+                     ▼
+             Top-K relevant chunks
+                     │
+                     ▼
+             GPT-4o (context-only prompt)
+                     │
+                     ▼
+                  Answer
+```
 
-- **Custom Retrieval Logic**  
-  Implements semantic retrieval manually using embeddings and **dot product similarity**, without external vector database frameworks.
+**Why dot product?** OpenAI embedding vectors are L2-normalized (unit length), so dot product is equivalent to cosine similarity — no extra computation needed.
 
-- **Sliding-Window Chunking**  
-  Splits the knowledge base into overlapping chunks to improve semantic continuity across adjacent text segments.
+---
 
-- **Embedding Reuse for Efficiency**  
-  Document embeddings are generated once during setup and reused across multiple queries in the same session, reducing repeated API calls, latency, and cost.
+## Engineering highlights
 
-- **Interactive Retrieval Tuning**  
-  The system starts with a small retrieval depth (`K=1`) and allows the user to increase it dynamically when the retrieved context is insufficient.
+- **No external vector database** — embeddings are stored in a plain Python list and scored with a manual dot product loop
+- **Sliding-window chunking** — configurable `chunk_size` and `overlap` preserve semantic continuity across chunk boundaries
+- **Embeddings computed once per session** — the corpus is embedded at startup and reused across all queries, avoiding redundant API calls
+- **Dynamic K adjustment** — if the model cannot answer from K=1 chunks, the user is prompted to increase K before re-querying
+- **Context-constrained generation** — the prompt explicitly instructs the model to answer only from retrieved context, or respond with `"i don't have enough data"`
 
-## Key Features
+---
+
+## Modes
 
 ### 1. Interactive RAG Chat
-Ask questions against a local knowledge base using a full RAG pipeline:
-1. split the source text into chunks,
-2. embed the chunks,
-3. retrieve the top-K relevant chunks,
-4. generate an answer using only the retrieved context.
+Ask questions against `knowledge.txt` in real time. Chunk size, overlap, and K are configurable at startup.
 
 ### 2. Batch Q&A Processor
-Read multiple questions from a local file and generate an output report with structured answers.
+Reads questions from `question.txt`, runs each through the full RAG pipeline, and writes structured answers to `answers.txt`.
 
-### 3. Runtime Hyperparameter Control
-Configure important retrieval parameters directly from the terminal:
-- `chunk_size`
-- `overlap`
-- `K-value`
+---
 
-### 4. Smart Retrieval Feedback
-If the model cannot answer from the current context, the system suggests increasing the retrieval depth to improve coverage.
+## Tech stack
 
-## Tech Stack
+| Component | Choice |
+|-----------|--------|
+| Language | Python 3.8+ |
+| LLM | `gpt-4o` |
+| Embedding model | `text-embedding-3-small` |
+| Similarity metric | Dot product (≡ cosine for normalized vectors) |
+| Vector store | In-memory list |
+| Secrets | `python-dotenv` |
 
-- **Language:** Python 3.8+
-- **LLM:** `gpt-4o`
-- **Embedding Model:** `text-embedding-3-small`
-- **Environment Management:** `python-dotenv`
+---
 
-## Project Structure
+## Setup
 
-- `main.py` — main application logic, retrieval pipeline, terminal interface, and batch processor
-- `knowledge.text` — local knowledge base used by the RAG mode
-- `question.text` — input file containing batch questions
-- `answers.text` — generated output file for batch answers
-- `requirements.txt` — project dependencies
-
-## How It Works
-
-### RAG Flow
-1. Load the local knowledge base
-2. Split it into overlapping chunks
-3. Generate embeddings for all chunks
-4. Embed the user query
-5. Compute similarity scores between the query and stored chunk vectors
-6. Retrieve the top-K most relevant chunks
-7. Send the retrieved context to the model for constrained answer generation
-
-### Retrieval Strategy
-The system uses **dot product similarity** between the query embedding and each stored chunk embedding to rank relevance.
-
-### Answer Constraint
-The generation prompt explicitly instructs the model to answer **only** from the retrieved context.  
-If the answer is not present, the model must respond with:
-
-`i don't have enough data`
-
-## Getting Started
-
-### 1. Clone the Repository
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
-
-
-
-
-
-
-# Advanced Python RAG: Engineering from Scratch 
-
-A high-performance, framework-free implementation of a **Retrieval-Augmented Generation (RAG)** system.
-Built with Python and OpenAI, this project focuses on the core mechanics of vector databases, 
-semantic search, and dynamic context optimization.
-
-## The Engineering Approach
-Unlike implementations that rely on heavy abstractions like LangChain or LlamaIndex, this project is built from the ground up
-to demonstrate a deep understanding of the RAG pipeline:
-* **Vector Mathematics:** Manual implementation of **Dot Product similarity** for semantic retrieval without external vector DBs.
-* **Data Pipelines:** Custom **sliding-window chunking** logic to preserve semantic continuity across text segments.
-* **Cost Efficiency:** Embeddings are generated in optimized batches once per session and reused across multiple queries to minimize API latency and token costs.
-
-##  Key Features
-* **Dual Operation Modes:**
-    1. **Interactive RAG Chat:** Live conversation with your local data using dynamic retrieval.
-    2. **Batch Q&A Processor:** Automated bulk processing that reads questions from a file and generates a structured answer report.
-* **Dynamic Hyperparameter Tuning:** Real-time configuration of `chunk_size`, `overlap`, and `K-value` directly through the terminal interface.
-* **Proactive Context Optimization (Smart K):** A unique feedback loop that detects insufficient 
-    context (K=1) and suggests increasing retrieval depth ($K > 1$) to recover missing information.
-
-
-
-##  Tech Stack
-* **Language:** Python 3.8+
-* **AI Models:** * `gpt-4o` for high-reasoning generation.
-    * `text-embedding-3-small` for efficient vector space mapping.
-* **Security:** Environment-based API key management via `python-dotenv`.
-
-##  Project Structure
-* `main.py`: The core engine featuring the retrieval logic, interactive menu, and batch processor.
-* `knowledge.text`: The local knowledge base (Source of Truth).
-* `question.text`: Input file for the Batch Q&A mode.
-* `requirements.txt`: Minimal dependencies for a lightweight, transparent footprint. 
-
-## 🚀 Getting Started
-
-### 1. Installation
-```bash
-git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
-cd YOUR_REPO_NAME
+git clone https://github.com/oriyacohen1000/python-rag-from-scratch.git
+cd python-rag-from-scratch
 pip install -r requirements.txt
+```
 
+### 2. Add your API key
 
-### 2. Configuration
-Create a .env file in the root directory and add your OpenAI credentials:
+```bash
+echo "OPENAI_API_KEY=sk-..." > .env
+```
 
-use this line of code:
+### 3. Run
 
-OPENAI_API_KEY=your_actual_api_key_here
-
-
-###3. Execution
-Run the main script and follow the interactive on-screen menu:
-
-Bash:
-
+```bash
 python main.py
+```
 
+Choose mode 1 for interactive chat or mode 2 for batch processing.
 
-Optimization Tip:
-For technical or legal documents, a chunk_size of 800 with an overlap of 100 is recommended.
-If the system responds with "i don't have enough data", utilize the built-in prompt to dynamically 
-increase the K-value to 3 or 5 to broaden the search horizon.
+---
 
-Developed as a showcase of core AI engineering principles
-# python-rag-from-scratch
+## Project structure
+
+```
+python-rag-from-scratch/
+├── main.py          # Full RAG pipeline, chunking, retrieval, generation, CLI
+├── knowledge.txt    # Document used as the knowledge base
+├── question.txt     # Input questions for batch mode
+├── answers.txt      # Generated output (created at runtime, gitignored)
+├── requirements.txt
+├── .env.example
+└── tests/
+    └── test_rag.py  # Unit tests for chunking and retrieval logic
+```
+
+---
+
+## Running tests
+
+```bash
+pytest tests/ -v
+```
+
+Tests cover:
+- Sliding-window chunking (exact size, overlap, short text)
+- Retrieval ordering by dot product score
+- Batch mode calls the full RAG pipeline (not bare GPT)
+
+---
+
+## Tuning tips
+
+| Parameter | Effect | Good starting point |
+|-----------|--------|---------------------|
+| `chunk_size` | Larger = more context per chunk, less precision | 500–800 |
+| `overlap` | Higher = better continuity across boundaries | 10–15% of chunk_size |
+| `K` | Higher = more context retrieved, higher cost | Start at 1, increase if needed |

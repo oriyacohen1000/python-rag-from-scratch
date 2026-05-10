@@ -1,7 +1,9 @@
 .env
+answers.txt
 __pycache__/
-.venv/
+*.py[cod]
+.pytest_cache/
 venv/
+.venv/
 .idea/
 .DS_Store
-answers.txt

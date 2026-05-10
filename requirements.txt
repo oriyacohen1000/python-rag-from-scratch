@@ -1,2 +1,3 @@
-openai
-python-dotenv
+openai==2.36.0
+python-dotenv==1.2.1
+pytest==7.1.2
